@@ -5,6 +5,7 @@ import { Overview } from './pages/Overview'
 import { CRM } from './pages/CRM'
 import { Calls } from './pages/Calls'
 import { Slots } from './pages/Slots'
+import { Automation } from './pages/Automation'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,7 @@ function App() {
             <Route path="/crm" element={<CRM />} />
             <Route path="/calls" element={<Calls />} />
             <Route path="/slots" element={<Slots />} />
+            <Route path="/automation" element={<Automation />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

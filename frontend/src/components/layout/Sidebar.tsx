@@ -5,6 +5,7 @@ import {
   Users, 
   Phone, 
   Calendar, 
+  Sparkles,
   ChevronLeft, 
   ChevronRight,
   Mic2
@@ -16,6 +17,7 @@ const navItems = [
   { icon: Users, label: 'CRM Details', path: '/crm' },
   { icon: Phone, label: 'Call History', path: '/calls' },
   { icon: Calendar, label: 'Filled Slots', path: '/slots' },
+  { icon: Sparkles, label: 'Automation center', path: '/automation' },
 ]
 
 export function Sidebar() {
