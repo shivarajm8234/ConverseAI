@@ -1,7 +1,7 @@
 # Voice Calling Agent - Technical Walkthrough
 
 ## Overview
-This document outlines the architecture and technology stack for building a real-time voice calling agent that can handle queries in Kannada and Hindi using open-source STT/TTS models, with LangGraph for workflow orchestration, custom CRM integration, admin dashboard analytics, and Telegram automation.
+This document outlines the architecture and technology stack for building a real-time voice calling agent that can handle queries in Kannada and Hindi using open-source STT/TTS models, with LangGraph for workflow orchestration, custom CRM integration, admin dashboard analytics, and Telegram automation..
 
 ## Technology Stack
 
