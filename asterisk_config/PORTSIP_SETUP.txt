@@ -1,0 +1,71 @@
+VoiceAI + PortSIP — register, then call the agent on 3000
+============================================================
+
+Asterisk (this repo) uses:
+  SIP UDP port     : 5060
+  Register user    : 2000
+  Password         : 5678
+  AI extension     : 3000  (AGI voice agent — dial this after you are registered; any SIP app, not only PortSIP)
+
+Replace YOUR_PC_IP with the LAN IPv4 of the machine running Asterisk (same Wi‑Fi as the phone).
+
+
+A) PortSIP account fields (typical names)
+-----------------------------------------
+  SIP Server / Registrar / Domain :  YOUR_PC_IP
+  User name / SIP ID / Auth ID    :  2000
+  Password                         :  5678
+  Port                             :  5060
+  Transport                        :  UDP  (not TCP, not TLS)
+  Outbound proxy                   :  (empty / none)
+  STUN                             :  off for same‑LAN tests
+
+  Display name can be anything (e.g. Mobile).
+
+
+B) Order of operations
+----------------------
+  1) Start Asterisk (./master_setup.sh or systemctl start asterisk).
+  2) In PortSIP, save the account and wait until status shows Registered / OK.
+  3) Open the dial pad and call:  3000
+  4) You should hear the agent (Kannada greeting) and be able to speak.
+
+
+C) If PortSIP shows "Unauthorized"
+----------------------------------
+  • User and password must be exactly 2000 / 5678 (no spaces).
+  • Server must be YOUR_PC_IP, not 127.0.0.1 on the phone.
+  • Transport UDP, port 5060.
+  • PC firewall: allow UDP 5060 and UDP 10000–20000.
+
+  On the Asterisk host:
+    sudo asterisk -rx "pjsip show endpoint 2000"
+    sudo asterisk -rx "pjsip set logger on"
+  Then try registering again and watch: sudo tail -f /var/log/asterisk/full
+
+
+D) Codecs
+---------
+  Endpoint 2000 allows ulaw and alaw. In PortSIP, enable PCMU (G.711 µ-law)
+  and/or PCMA (G.711 A-law) if there is a codec list.
+
+
+E) Call to 3000 hangs up immediately
+------------------------------------
+  • Redeploy the AGI script after backend build:
+      cd <project-root> && ./deploy_agent.sh
+  • Ensure Node is at /usr/bin/node:  which node
+  • Logs:
+      sudo tail -50 /tmp/agent_debug.log
+      sudo tail -50 /var/log/asterisk/full
+  • .env must include ELEVENLABS_API_KEY (greeting TTS) and GROQ_API_KEY (LLM/STT).
+  • Keys are read from /opt/converse/backend/.env (symlink to your project backend).
+
+
+F) "Unable to open asterisk.conf" / "asterisk.ctl does not exist"
+-----------------------------------------------------------------
+  • Start the daemon:   sudo systemctl start asterisk
+  • Open CLI with:      sudo asterisk -rvvv
+    (Normal users cannot read /etc/asterisk/*.conf unless in group "asterisk".)
+  • Quick check:         ./scripts/asterisk_up.sh
+  • After master_setup: log out and back in if you were added to group asterisk.

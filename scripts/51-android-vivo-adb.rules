@@ -1,0 +1,3 @@
+# Vivo phones (e.g. USB idVendor 2d95 — V2141)
+# Install: sudo cp scripts/51-android-vivo-adb.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTR{idVendor}=="2d95", MODE="0666", GROUP="plugdev"
