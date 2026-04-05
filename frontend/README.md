@@ -1,56 +1,65 @@
-# ConverseAI - Animated Dashboard
+# VoiceAI Frontend - Premium Admin Dashboard
 
-Professional, high-performance admin dashboard for Voice Calling Agents. Built with React 18, TypeScript, and Vite.
+A professional, high-performance admin dashboard for VoiceAI agents, featuring sub-second telemetry and a premium interactive design. Built with React 19, TypeScript, and Vite.
+
+---
 
 ## ✨ Features
-- **GSAP Animations**: Premium "MagicBento" interactive grid with global spotlighting.
-- **Real-time Analytics**: Visualized performance metrics and call volume trends.
-- **CRM Integration**: Manage customer profiles, leads, and outcomes.
-- **Slot Management**: Interactive calendar-based booking and scheduling.
+
+- **🪄 MagicBento Engine**: Premium GSAP-powered interactive grid with global spotlighting and glassmorphism.
+- **📞 Call Lifecycle Telemetry**: Real-time visualization of call metrics, intents, and sentiment trends.
+- **🧠 Knowledge Management**: Interface for managing the Hybrid RAG system (Vector DB + Knowledge Graph).
+- **📋 Integrated CRM**: Holistic view of customer history, lead scores, and call outcomes.
+- **📅 Slot & Booking**: Calendar-based management for service appointments and scheduling.
+
+---
 
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-- [Node.js](https://nodejs.org/) (v18.0 or higher)
-- [npm](https://www.npmjs.com/) (v9.0 or higher)
+- Node.js (v20+)
+- npm (v9+)
 
 ### 2. Installation
-Clone the repository and install the dependencies:
 ```bash
-git clone https://github.com/YOUR_USERNAME/ConverseAI.git
-cd ConverseAI/frontend
+cd frontend
 npm install
 ```
 
 ### 3. Environment Configuration
-Create a `.env` file based on the example and set your backend API URL:
+Create a `.env` file based on `.env.example`:
 ```bash
-cp .env.example .env
+VITE_API_BASE_URL=http://localhost:3000
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_key
 ```
-*(Open `.env` and set `VITE_API_BASE_URL=http://localhost:8000/api`)*
 
 ### 4. Development Server
-Start the development server:
 ```bash
 npm run dev
 ```
-
-The application will be available at [http://localhost:5173](http://localhost:5173).
-
-## 🛠️ Tech Stack
-- **Framework**: React 18 + Vite
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS (v4)
-- **UI Components**: Radix UI + Lucide Icons
-- **Animations**: GSAP (GreenSock)
-- **Charting**: Recharts
-- **Data Fetching**: TanStack Query (React Query) + Axios
-
-## 📂 Project Structure
-- `src/components/layout`: Sidebar, TopBar, and Dashboard wrapper.
-- `src/components/ui`: Reusable UI components including the `MagicBento` animation engine.
-- `src/pages`: Main dashboard views (Overview, CRM, Calls, Slots).
-- `src/lib`: Shared utilities and theme configuration.
+Access at [http://localhost:5173](http://localhost:5173).
 
 ---
-Created by ConverseAI Team.
+
+## 🛠️ Tech Stack
+
+- **Framework**: React 19 + Vite
+- **Styling**: TailwindCSS 4, Framer Motion, and GSAP (GreenSock) for high-end animations.
+- **Icons**: Lucide React.
+- **Data Fetching**: TanStack Query (React Query) for efficient caching.
+- **Charting**: Recharts for responsive analytics.
+- **Communication**: `sip.js` for WebRTC-based voice calling features.
+
+---
+
+## 📂 Project Structure
+
+- `src/components/magic`: The GSAP-powered MagicBento animation components.
+- `src/pages`: Core views including Dashboard, CRM, Calls, and Knowledge.
+- `src/hooks`: Custom hooks for API interactions and voice management.
+- `src/lib`: Shared utilities and theme tokens.
+
+---
+*Crafted for visual excellence and operational efficiency.*
+
