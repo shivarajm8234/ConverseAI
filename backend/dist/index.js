@@ -58,15 +58,38 @@ app.get('/api/calls', (req, res) => {
     ]);
 });
 app.get('/api/graph', async (req, res) => {
-    // Get graph nodes and edges from Supabase
-    const nodes = await prisma.graphNode.findMany({
-        take: 100,
-        include: { sources: true, targets: true }
-    });
-    const edges = await prisma.graphEdge.findMany({
-        take: 100
-    });
-    res.json({ nodes, edges });
+    try {
+        const [nodes, edges] = await Promise.all([
+            prisma.graphNode.findMany({
+                take: 100,
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    label: true,
+                    type: true,
+                    metadata: true,
+                    createdAt: true,
+                },
+            }),
+            prisma.graphEdge.findMany({
+                take: 100,
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    relation: true,
+                    sourceNodeId: true,
+                    targetNodeId: true,
+                    createdAt: true,
+                },
+            }),
+        ]);
+        res.json({ nodes, edges });
+    }
+    catch (e) {
+        console.error('GET /api/graph failed:', e);
+        const message = e instanceof Error ? e.message : 'Database error';
+        res.status(500).json({ error: message, nodes: [], edges: [] });
+    }
 });
 // Admin endpoint (example)
 app.post('/admin/knowledge/refresh', async (req, res) => {

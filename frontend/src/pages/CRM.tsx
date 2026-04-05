@@ -9,15 +9,14 @@ import {
   Tag
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+import { apiUrl } from '@/lib/api'
 
 export function CRM() {
   const { data: customers } = useQuery({
     queryKey: ['crm-customers'],
     queryFn: async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/crm`)
+        const res = await fetch(apiUrl('/crm'))
         if (!res.ok) throw new Error('Network error')
         const data = await res.json()
         return data || []
@@ -66,6 +65,7 @@ export function CRM() {
               <tr className="bg-slate-900 text-slate-400 text-xs uppercase tracking-wider font-bold border-b border-slate-800">
                 <th className="px-6 py-4">Customer</th>
                 <th className="px-6 py-4">Contact</th>
+                <th className="px-6 py-4">Latest AI Summary</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -96,13 +96,22 @@ export function CRM() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
+                      {customer.requirements ? (
+                        <p className="text-xs text-slate-400 line-clamp-2 max-w-[200px]" title={customer.requirements}>
+                          {customer.requirements}
+                        </p>
+                      ) : (
+                        <span className="text-[10px] text-slate-600 italic">No AI summary yet</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <span className={cn(
                         "px-3 py-1 rounded-full text-xs font-bold border",
                         customer.status === 'Hot' ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
-                        customer.status === 'Warm' ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" :
+                        customer.status === 'WARM' || customer.status === 'Warm' ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" :
                         "bg-cyan-500/10 text-cyan-500 border-cyan-500/20"
                       )}>
-                        {customer.status || 'Cold'}
+                        {customer.status || 'NEW'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">

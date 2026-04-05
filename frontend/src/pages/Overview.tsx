@@ -18,8 +18,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ParticleCard, GlobalSpotlight, useMobileDetection } from '@/components/ui/MagicBento'
+import { apiUrl } from '@/lib/api'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 const PURPLE_GLOW = '132, 0, 255'
 
 export function Overview() {
@@ -31,7 +31,7 @@ export function Overview() {
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/stats`)
+        const res = await fetch(apiUrl('/stats'))
         if (!res.ok) throw new Error('Network error');
         return await res.json()
       } catch (e) {

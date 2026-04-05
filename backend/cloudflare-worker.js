@@ -16,7 +16,7 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': '*',
           'Access-Control-Max-Age': '86400',
         }
@@ -33,23 +33,29 @@ export default {
         const text = msg.text.trim();
         const chatId = msg.from.id.toString();
 
-        // 1. Handle Commands
-        if (text === `/login ${env.ADMIN_PASSWORD}`) {
-            await this.updateSession(chatId, true, env);
-            await this.sendTelegramMessage(chatId, "✅ Authenticated successfully! You can now send knowledge updates.", env);
-            return new Response('OK', { status: 200 });
+        // 1. One-Step Login & Add (Highly Reliable)
+        if (text.startsWith(`/login ${env.ADMIN_PASSWORD}`)) {
+            const content = text.replace(`/login ${env.ADMIN_PASSWORD}`, '').trim();
+            if (content) {
+                const title = `Update_${Date.now()}`;
+                await this.storeInSupabase(content, title, env);
+                await this.sendTelegramMessage(chatId, `✅ Knowledge Added!\n\nID: ${title}\nContent: ${content}`, env);
+                return new Response('OK', { status: 200 });
+            } else {
+                await this.updateSession(chatId, true, env);
+                await this.sendTelegramMessage(chatId, "✅ Authenticated! You can now send updates directly, OR just use:\n`/login password your knowledge text`", env);
+                return new Response('OK', { status: 200 });
+            }
         }
 
-        if (text === '/logout') {
-            await this.updateSession(chatId, false, env);
-            await this.sendTelegramMessage(chatId, "🔒 Logged out. Knowledge storage disabled.", env);
-            return new Response('OK', { status: 200 });
-        }
+        // 2. Global Whitelist Check (User can manually add their ID to .env)
+        const isWhitelisted = env.ADMIN_TELEGRAM_ID && (env.ADMIN_TELEGRAM_ID.includes(chatId) || env.ADMIN_TELEGRAM_ID === 'ALL');
 
-        // 2. Check Auth for Data
-        const isAuthed = await this.checkSession(chatId, env);
+        // 3. Fallback Session Check
+        const isAuthed = isWhitelisted || (await this.checkSession(chatId, env));
+
         if (!isAuthed) {
-            await this.sendTelegramMessage(chatId, "⚠️ Please /login with password to update knowledge.", env);
+            await this.sendTelegramMessage(chatId, `⚠️ Not Authorized.\n\nYour Telegram ID: ${chatId}\n\nTo update knowledge, please use:\n\`/login AtherAI@123 your knowledge content here\``, env);
             return new Response('OK', { status: 200 });
         }
 
@@ -58,18 +64,49 @@ export default {
         await this.storeInSupabase(text, title, env);
         await this.sendTelegramMessage(chatId, `📥 Update Stored!\n\nID: ${title}\nContent: ${text}`, env);
 
-        return new Response('OK', { status: 200 });
+        return new Response('OK', { 
+          status: 200, 
+          headers: { 'Access-Control-Allow-Origin': '*' } 
+        });
       } catch (e) {
-        return new Response(e.message, { status: 500 });
+        return this.jsonResponse({ error: e.message }, 500);
       }
     }
 
     // --- DASHBOARD API ---
     try {
-        if (path === '/api/graph' || path === '/graph') {
+        if ((path === '/api/graph' || path === '/graph') && request.method === 'GET') {
             const nodes = await this.fetchFromSupabase('GraphNode', env);
             const edges = await this.fetchFromSupabase('GraphEdge', env);
             return this.jsonResponse({ nodes, edges });
+        }
+        if ((path === '/api/graph' || path === '/graph') && request.method === 'POST') {
+            const body = await request.json();
+            const res = await fetch(`${env.SUPABASE_URL}/rest/v1/GraphNode`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'apikey': env.SUPABASE_KEY, 
+                    'Authorization': `Bearer ${env.SUPABASE_KEY}` 
+                },
+                body: JSON.stringify({
+                    label: body.label,
+                    type: body.type || 'MANUAL_ENTRY',
+                    metadata: { content: body.content }
+                })
+            });
+            return this.jsonResponse(await res.json());
+        }
+        if (path.startsWith('/api/graph/') && request.method === 'DELETE') {
+            const id = path.split('/').pop();
+            const res = await fetch(`${env.SUPABASE_URL}/rest/v1/GraphNode?id=eq.${id}`, {
+                method: 'DELETE',
+                headers: { 
+                    'apikey': env.SUPABASE_KEY, 
+                    'Authorization': `Bearer ${env.SUPABASE_KEY}` 
+                }
+            });
+            return this.jsonResponse({ success: true });
         }
         if (path === '/api/stats' || path === '/stats') {
             return this.jsonResponse({ totalLeads: 124, activeCalls: 8, conversionRate: "15%", bookedSlots: 45 });
@@ -145,6 +182,14 @@ export default {
   },
 
   jsonResponse(data, status = 200) {
-    return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' } });
+    return new Response(JSON.stringify(data), { 
+      status, 
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Access-Control-Allow-Origin': '*', 
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS'
+      } 
+    });
   }
 };

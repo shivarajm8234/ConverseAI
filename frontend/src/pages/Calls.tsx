@@ -14,8 +14,8 @@ import {
 import { UserAgent, Inviter, SessionState } from 'sip.js';
 import type { UserAgentOptions } from 'sip.js';
 import { ParticleCard, GlobalSpotlight, useMobileDetection } from '@/components/ui/MagicBento';
+import { apiUrl } from '@/lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 const BLUE_GLOW = '0, 149, 255';
 
 export function Calls() {
@@ -38,7 +38,7 @@ export function Calls() {
     const { data: calls, isLoading } = useQuery({
         queryKey: ['calls-history'],
         queryFn: async () => {
-            const res = await fetch(`${API_BASE_URL}/calls`);
+            const res = await fetch(apiUrl('/calls'));
             if (!res.ok) throw new Error('Network error');
             return await res.json();
         }
@@ -339,19 +339,19 @@ export function Calls() {
                                 <p className="text-slate-600 italic">Syncing with Asterisk...</p>
                             ) : calls?.length > 0 ? (
                                 calls.map((call: any) => (
-                                    <div key={call.id} className="group p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl transition-all">
+                                    <div key={call.id} className="group p-6 bg-white/5 hover:bg-white/10 border border-white/5 rounded-3xl transition-all space-y-4">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-4">
-                                                <div className={`p-2 rounded-xl ${call.direction === 'inbound' ? 'bg-slate-800 text-slate-400' : 'bg-blue-600/20 text-blue-400'}`}>
-                                                    {call.direction === 'inbound' ? <PhoneIncoming size={18} /> : <PhoneOutgoing size={18} />}
+                                                <div className={`p-3 rounded-2xl ${call.direction === 'inbound' ? 'bg-slate-800 text-slate-400' : 'bg-blue-600/20 text-blue-400'}`}>
+                                                    {call.direction === 'inbound' ? <PhoneIncoming size={20} /> : <PhoneOutgoing size={20} />}
                                                 </div>
                                                 <div>
-                                                    <p className="text-white font-bold flex items-center gap-2 uppercase tracking-tighter">
+                                                    <p className="text-white font-bold flex items-center gap-2 uppercase tracking-tighter text-lg">
                                                         {call.from}
                                                         <span className="text-slate-600">→</span>
                                                         {call.to}
                                                     </p>
-                                                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{new Date(call.createdAt).toLocaleString()}</p>
+                                                    <p className="text-xs text-slate-500 font-mono mt-0.5">{new Date(call.createdAt).toLocaleString()}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -359,9 +359,37 @@ export function Calls() {
                                                     }`}>
                                                     {call.status}
                                                 </span>
-                                                <p className="text-[11px] text-slate-500 mt-1 font-medium">{call.duration || '00:00'}</p>
+                                                <p className="text-sm text-slate-400 mt-1 font-medium">{call.duration || '00:00'}</p>
                                             </div>
                                         </div>
+
+                                        {(call.summary || call.followUpPlan) && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5">
+                                                {call.summary && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">AI Summary</p>
+                                                        <p className="text-xs text-slate-300 leading-relaxed">{call.summary}</p>
+                                                    </div>
+                                                )}
+                                                {call.followUpPlan && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-[10px] text-emerald-500/70 uppercase font-bold tracking-widest">Follow-up Plan</p>
+                                                        <p className="text-xs text-emerald-400/90 leading-relaxed font-medium">{call.followUpPlan}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {call.transcript && (
+                                            <details className="group/transcript">
+                                                <summary className="text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer uppercase font-bold tracking-widest list-none flex items-center gap-1">
+                                                    <span className="group-open/transcript:rotate-180 transition-transform">▼</span> View Full Transcript
+                                                </summary>
+                                                <div className="mt-2 text-[11px] text-slate-400 bg-black/20 p-3 rounded-xl border border-white/5 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                                    {call.transcript}
+                                                </div>
+                                            </details>
+                                        )}
                                     </div>
                                 ))
                             ) : (

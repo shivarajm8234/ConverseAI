@@ -1,4 +1,4 @@
-// Mock DB
+import { prisma } from '../../utils/db.js';
 export const init = async () => {
     console.log('💼 CRM Module (Lead Management) initialized.');
 };
@@ -17,22 +17,27 @@ export const updateLeadFromCall = async (customerId: string, analysis: any) => {
     console.log(`📈 CRM Updating Customer Lead Score: ${customerId} -> ${newScore}`);
     
     // Prisma Update
-    // await prisma.customer.update({
-    //     where: { id: customerId },
-    //     data: {
-    //         leadScore: newScore,
-    //         requirements: analysis.importantInfo,
-    //         status: analysis.requiresFollowUp ? 'FOLLOW_UP' : 'ACTIVE'
-    //     }
-    // });
+    await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+            leadScore: newScore,
+            requirements: analysis.importantInfo,
+            status: analysis.requiresFollowUp ? 'WARM' : 'ACTIVE'
+        }
+    });
 };
 
 export const getHighWeightLeads = async () => {
-    // Get leads with score > 0.8
-    return [
-       { id: '1', name: 'John Doe', phone: '+1234567890', leadScore: 0.9, status: 'HIGH_PRIORITY' },
-       { id: '2', name: 'Alice Smith', phone: '+0987654321', leadScore: 0.85, status: 'ACTIVE' }
-    ];
+    // Get all leads (or filter by score)
+    try {
+        return await prisma.customer.findMany({
+            orderBy: { updatedAt: 'desc' },
+            take: 100
+        });
+    } catch (e) {
+        console.error('CRM getHighWeightLeads failed:', e);
+        return [];
+    }
 };
 
 export const offerRecommendations = (customerId: string) => {

@@ -1,20 +1,22 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Phone, 
-  Calendar, 
+import {
+  LayoutDashboard,
+  Users,
+  Phone,
+  Calendar,
   Sparkles,
-  ChevronLeft, 
+  ChevronLeft,
   ChevronRight,
   Mic2,
-  Network
+  Network,
+  Bot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Overview', path: '/' },
+  { icon: Bot, label: 'Voice agent', path: '/agent' },
   { icon: Users, label: 'CRM Details', path: '/crm' },
   { icon: Phone, label: 'Call History', path: '/calls' },
   { icon: Calendar, label: 'Filled Slots', path: '/slots' },

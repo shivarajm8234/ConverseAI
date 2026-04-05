@@ -15,8 +15,7 @@ import { format, isSameDay, parseISO } from 'date-fns'
 
 // Import react-day-picker styles (Basic styles for starting point)
 import 'react-day-picker/dist/style.css'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+import { apiUrl } from '@/lib/api'
 
 export function Slots() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
@@ -25,7 +24,7 @@ export function Slots() {
     queryKey: ['filled-slots'],
     queryFn: async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/slots`)
+        const res = await fetch(apiUrl('/slots'))
         if (!res.ok) throw new Error('Network error')
         const data = await res.json()
         return data || []

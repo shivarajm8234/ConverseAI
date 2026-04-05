@@ -48,6 +48,8 @@ model Call {
   intent       String?
   sentiment    String?
   importantInfo String?
+  summary      String?
+  followUpPlan String?
   createdAt    DateTime @default(now())
 }
 
@@ -97,4 +99,9 @@ model GraphEdge {
   source       GraphNode @relation("source", fields: [sourceNodeId], references: [id])
   target       GraphNode @relation("target", fields: [targetNodeId], references: [id])
   createdAt    DateTime  @default(now())
+}
+
+model BotSession {
+  id      String  @id
+  authed  Boolean @default(false)
 }
