@@ -5,10 +5,13 @@
     "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
     "audiosocket": "cd backend && npm run audiosocket",
     "install-all": "concurrently \"cd backend && npm install\" \"cd frontend && npm install\"",
-    "build:all": "concurrently \"cd backend && npm run build\" \"cd frontend && npm run build\""
+    "build:all": "concurrently \"cd backend && npm run build\" \"cd frontend && npm run build\"",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "wrangler": "^4.85.0"
   },
   "dependencies": {
     "firebase": "^12.11.0"
