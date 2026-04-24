@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { prisma } from './db.js';
 dotenv.config();
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const groqKey = process.env.GROQ_API_KEY;
@@ -65,6 +66,28 @@ export const extractIntent = async (transcript) => {
         response_format: { type: 'json_object' },
     });
     return JSON.parse(completion.choices?.[0]?.message?.content ?? '{}');
+};
+let knowledgeCache = null;
+const CACHE_TTL = 60000; // 60 seconds
+/** Fetch all manual knowledge graph nodes to use as LLM context */
+export const getKnowledgeContext = async () => {
+    const now = Date.now();
+    if (knowledgeCache && (now - knowledgeCache.ts < CACHE_TTL)) {
+        return knowledgeCache.data;
+    }
+    try {
+        const nodes = await prisma.graphNode.findMany({
+            take: 30,
+            orderBy: { createdAt: 'desc' }
+        });
+        const data = nodes.map(n => `${n.label}: ${n.metadata && n.metadata.content ? n.metadata.content : ''}`).join('\n');
+        knowledgeCache = { data, ts: now };
+        return data;
+    }
+    catch (e) {
+        console.error('getKnowledgeContext Error:', e.message);
+        return "Ather 450X price is Rs 1,45,000, 105km range, 90kmph top speed.";
+    }
 };
 /** Chat client: Groq when GROQ_API_KEY is set, otherwise OpenAI. */
 export const openai = chatClient;

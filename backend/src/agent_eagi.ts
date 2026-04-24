@@ -138,7 +138,7 @@ async function finalizeCall(phone: string) {
         messages: [{ role: 'system', content: 'Summarize the conversation: {"summary": "...", "followUp": "..."}' }, { role: 'user', content: fullTranscript }],
         response_format: { type: 'json_object' }
     });
-    const summary = JSON.parse(summaryRes.choices[0].message.content || '{}');
+    const summary = JSON.parse(summaryRes.choices?.[0]?.message?.content || '{}');
     try {
         let customer = await prisma.customer.findUnique({ where: { phone } });
         if (!customer) customer = await prisma.customer.create({ data: { phone, name: 'Guest', status: 'NEW' } });
@@ -168,7 +168,7 @@ async function main() {
         if (byte[0] === 0x0a) {
             if (line === '') break;
             line = '';
-        } else if (byte[0] !== 0x0d) line += String.fromCharCode(byte[0]);
+        } else if (byte[0] !== undefined && byte[0] !== 0x0d) line += String.fromCharCode(byte[0]);
     }
 
     log("Agent Started");

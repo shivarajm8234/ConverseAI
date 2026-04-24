@@ -50,12 +50,30 @@ app.post('/api/slots', (req, res) => {
         res.json({ success: false, message: `Slot ${time} is unavailable or does not exist.` });
     }
 });
-app.get('/api/calls', (req, res) => {
-    // Mock Call Logs
-    res.json([
-        { id: 'C1', contact: 'John Doe', duration: '5:24', status: 'COMPLETED', sentiment: 'POSITIVE' },
-        { id: 'C2', contact: 'Alice Smith', duration: '2:10', status: 'MISSED', sentiment: 'NEUTRAL' }
-    ]);
+app.get('/api/calls', async (req, res) => {
+    try {
+        const calls = await prisma.call.findMany({
+            include: { customer: true },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
+        res.json(calls.map(c => ({
+            id: c.id,
+            from: c.customer.phone,
+            to: 'AI Agent',
+            duration: `${Math.floor(c.duration / 60)}:${(c.duration % 60).toString().padStart(2, '0')}`,
+            status: 'completed',
+            createdAt: c.createdAt,
+            summary: c.summary,
+            followUpPlan: c.followUpPlan,
+            transcript: c.transcript,
+            direction: 'inbound'
+        })));
+    }
+    catch (e) {
+        console.error('GET /api/calls failed:', e);
+        res.status(500).json({ error: 'Failed to fetch calls' });
+    }
 });
 app.get('/api/graph', async (req, res) => {
     try {
@@ -63,32 +81,45 @@ app.get('/api/graph', async (req, res) => {
             prisma.graphNode.findMany({
                 take: 100,
                 orderBy: { createdAt: 'desc' },
-                select: {
-                    id: true,
-                    label: true,
-                    type: true,
-                    metadata: true,
-                    createdAt: true,
-                },
             }),
             prisma.graphEdge.findMany({
                 take: 100,
                 orderBy: { createdAt: 'desc' },
-                select: {
-                    id: true,
-                    relation: true,
-                    sourceNodeId: true,
-                    targetNodeId: true,
-                    createdAt: true,
-                },
             }),
         ]);
         res.json({ nodes, edges });
     }
     catch (e) {
         console.error('GET /api/graph failed:', e);
-        const message = e instanceof Error ? e.message : 'Database error';
-        res.status(500).json({ error: message, nodes: [], edges: [] });
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+app.post('/api/graph', async (req, res) => {
+    try {
+        const { label, content, type = 'MANUAL_ENTRY' } = req.body;
+        const node = await prisma.graphNode.create({
+            data: {
+                label,
+                type,
+                metadata: { content }
+            }
+        });
+        res.json(node);
+    }
+    catch (e) {
+        console.error('POST /api/graph failed:', e);
+        res.status(500).json({ error: 'Failed to create node' });
+    }
+});
+app.delete('/api/graph/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await prisma.graphNode.delete({ where: { id } });
+        res.json({ success: true });
+    }
+    catch (e) {
+        console.error('DELETE /api/graph failed:', e);
+        res.status(500).json({ error: 'Failed to delete node' });
     }
 });
 // Admin endpoint (example)
