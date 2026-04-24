@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import os from 'os';
+import path from 'path';
+import fs from 'fs';
+import axios from 'axios';
 import * as telegram from './modules/telegram/index.js';
 import * as knowledge from './modules/knowledge/index.js';
 import * as calling from './modules/calling/index.js';
@@ -103,8 +106,8 @@ app.get('/api/calls', async (req, res) => {
             direction: 'inbound'
         })));
     } catch (e) {
-        console.error('GET /api/calls failed:', e);
-        res.status(500).json({ error: 'Failed to fetch calls' });
+        console.warn('⚠️ GET /api/calls failed (Database unreachable):', e);
+        res.json([]); // Return empty array to keep frontend happy
     }
 });
 
@@ -122,8 +125,37 @@ app.get('/api/graph', async (req, res) => {
         ]);
         res.json({ nodes, edges });
     } catch (e) {
-        console.error('GET /api/graph failed:', e);
-        res.status(500).json({ error: 'Database error' });
+        console.warn('⚠️ GET /api/graph failed (Prisma error), trying Supabase REST fallback...', e);
+        try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            
+            if (supabaseUrl && supabaseKey) {
+                const [nodesRes, edgesRes] = await Promise.all([
+                    axios.get(`${supabaseUrl}/rest/v1/GraphNode?select=*&limit=100`, {
+                        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+                    }),
+                    axios.get(`${supabaseUrl}/rest/v1/GraphEdge?select=*&limit=100`, {
+                        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+                    })
+                ]);
+                return res.json({ nodes: nodesRes.data, edges: edgesRes.data });
+            }
+            throw new Error('Supabase keys missing');
+        } catch (fallbackErr: any) {
+            console.error('❌ Fallback fetch failed:', fallbackErr.message);
+            // Fallback to local JSON if even REST fails
+            const fallbackPath = path.join(process.cwd(), 'src/utils/knowledge_fallback.json');
+            const fallbackData = JSON.parse(fs.readFileSync(fallbackPath, 'utf8'));
+            const nodes = fallbackData.nodes.map((n: any) => ({
+                id: n.label,
+                label: n.label,
+                type: n.type,
+                metadata: { content: n.content },
+                createdAt: new Date()
+            }));
+            res.json({ nodes, edges: [] });
+        }
     }
 });
 
@@ -157,8 +189,38 @@ app.post('/api/graph', async (req, res) => {
             res.json(node);
         }
     } catch (e) {
-        console.error('POST /api/graph failed:', e);
-        res.status(500).json({ error: 'Failed to create node' });
+        console.warn('⚠️ POST /api/graph failed (Prisma), trying REST fallback...', e);
+        try {
+            const { label, content, type = 'MANUAL_ENTRY' } = req.body;
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            
+            if (supabaseUrl && supabaseKey) {
+                // Generate embedding first
+                const fullContent = `${label}: ${content}`;
+                const embedding = await getEmbeddings(fullContent);
+                const vectorString = embedding ? `[${embedding.join(',')}]` : null;
+
+                const resNode = await axios.post(`${supabaseUrl}/rest/v1/GraphNode`, {
+                    label,
+                    type,
+                    metadata: { content },
+                    embedding: vectorString
+                }, {
+                    headers: { 
+                        'apikey': supabaseKey, 
+                        'Authorization': `Bearer ${supabaseKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    }
+                });
+                return res.json(resNode.data[0]);
+            }
+            throw new Error('Supabase keys missing');
+        } catch (fallbackErr: any) {
+            console.error('❌ Fallback creation failed:', fallbackErr.message);
+            res.status(500).json({ error: 'Failed to create node even with fallback' });
+        }
     }
 });
 

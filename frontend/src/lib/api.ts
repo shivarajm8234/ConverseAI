@@ -11,6 +11,12 @@ export function getApiBaseUrl(): string {
     const u = raw.replace(/\/$/, '');
     return u.endsWith('/api') ? u : `${u}/api`;
   }
+  
+  // If we are on localhost, and not using a proxy, try to point directly to 3001
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:3001/api';
+  }
+  
   return '/api';
 }
 

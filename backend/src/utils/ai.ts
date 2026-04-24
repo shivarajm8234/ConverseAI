@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import path from 'path';
+import fs from 'fs';
 import { prisma } from './db.js';
 import { pipeline } from '@xenova/transformers';
 
@@ -100,65 +102,132 @@ export const extractIntent = async (transcript: string) => {
 };
 
 let knowledgeCache: { data: string, ts: number } | null = null;
-const CACHE_TTL = 60000; // 60 seconds
+
+// Local Fallback Brain State
+let localKnowledgeVectors: { label: string, type: string, content: string, embedding: number[] }[] = [];
+
+/** Pre-vectorize the local fallback JSON for instant RAG if DB is down */
+const initLocalBrain = async () => {
+  try {
+    const fallbackPath = path.join(process.cwd(), 'src/utils/knowledge_fallback.json');
+    if (!fs.existsSync(fallbackPath)) return;
+    
+    const fallbackData = JSON.parse(fs.readFileSync(fallbackPath, 'utf8'));
+    console.log('🧠 Pre-vectorizing Local Brain...');
+    
+    for (const node of fallbackData.nodes) {
+      const fullText = `${node.label}: ${node.content}`;
+      const embedding = await getEmbeddings(fullText);
+      if (embedding) {
+        localKnowledgeVectors.push({ ...node, embedding });
+      }
+    }
+    console.log(`✅ Local Brain ready with ${localKnowledgeVectors.length} vectorized nodes.`);
+  } catch (err) {
+    console.error('❌ Failed to init Local Brain:', err);
+  }
+};
+
+// Start local brain init
+initLocalBrain();
 
 /** Fetch all manual knowledge graph nodes to use as LLM context */
 export const getKnowledgeContext = async () => {
-  const now = Date.now();
-  if (knowledgeCache && (now - knowledgeCache.ts < CACHE_TTL)) {
-    return knowledgeCache.data;
-  }
-  
   try {
     const nodes = await prisma.graphNode.findMany({
-      take: 30,
-      orderBy: { createdAt: 'desc' }
+      take: 20,
+      orderBy: { createdAt: 'desc' },
     });
-    const data = nodes.map(n => `${n.label}: ${n.metadata && (n.metadata as any).content ? (n.metadata as any).content : ''}`).join('\n');
-    knowledgeCache = { data, ts: now };
-    return data;
+    
+    if (nodes.length === 0) throw new Error('No nodes found');
+    
+    return nodes
+      .map((n) => `${n.label}: ${(n.metadata as any)?.content || ''}`)
+      .join('\n');
   } catch (e: any) {
-    console.error('getKnowledgeContext Error:', e.message);
-    return "Ather 450X price is Rs 1,45,000, 105km range, 90kmph top speed.";
+    console.warn('getKnowledgeContext Prisma Error, trying REST fallback...', e.message);
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (supabaseUrl && supabaseKey) {
+        const res = await axios.get(`${supabaseUrl}/rest/v1/GraphNode?select=label,metadata&limit=20&order=createdAt.desc`, {
+          headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+        });
+        if (res.data.length > 0) {
+            return res.data
+              .map((n: any) => `${n.label}: ${n.metadata?.content || ''}`)
+              .join('\n');
+        }
+      }
+      throw new Error('Supabase empty/missing');
+    } catch (restErr: any) {
+      console.error('getKnowledgeContext Fallback to Local Brain:', restErr.message);
+      return localKnowledgeVectors
+        .map((n: any) => `${n.label}: ${n.content}`)
+        .join('\n');
+    }
   }
 };
+
+/** Helper for cosine similarity */
+function cosineSimilarity(a: number[], b: number[]) {
+  let dotProduct = 0;
+  let mA = 0;
+  let mB = 0;
+  for(let i = 0; i < a.length; i++){
+      dotProduct += (a[i] * b[i]);
+      mA += (a[i] * a[i]);
+      mB += (b[i] * b[i]);
+  }
+  return dotProduct / (Math.sqrt(mA) * Math.sqrt(mB));
+}
 
 /** Vector-based semantic search for knowledge base */
 export const searchVectorStore = async (query: string, limit = 5) => {
   try {
     const embedding = await getEmbeddings(query);
-    if (!embedding) {
-      return await getKnowledgeContext();
-    }
-    
+    if (!embedding) return await getKnowledgeContext();
+
     const vectorString = `[${embedding.join(',')}]`;
     
-    // Search DocumentChunks
-    const docResults = await prisma.$queryRawUnsafe(`
-      SELECT content, (embedding <=> '${vectorString}'::vector) as distance
-      FROM "DocumentChunk"
-      ORDER BY distance ASC
-      LIMIT ${limit}
-    `);
-    
-    // Search GraphNodes
-    const graphResults = await prisma.$queryRawUnsafe(`
-      SELECT label, metadata, (embedding <=> '${vectorString}'::vector) as distance
-      FROM "GraphNode"
-      WHERE embedding IS NOT NULL
-      ORDER BY distance ASC
-      LIMIT ${limit}
-    `);
-    
-    const docContext = (docResults as any[]).map(r => r.content).join('\n');
-    const graphContext = (graphResults as any[]).map(r => `${r.label}: ${r.metadata?.content || ''}`).join('\n');
-    
-    console.log(`🔍 RAG: Found ${docResults.length} docs and ${graphResults.length} graph nodes.`);
-    
-    // Also include a few latest nodes for recency/general context
-    const recentContext = await getKnowledgeContext();
-    
-    return `### RELEVANT INFORMATION:\n${docContext}\n${graphContext}\n\n### GENERAL ATHER KNOWLEDGE:\n${recentContext}`;
+    // 1. Try Prisma first
+    let docContext = "";
+    let graphContext = "";
+
+    try {
+        const docChunks: any = await prisma.$queryRawUnsafe(`
+          SELECT content, metadata, 1 - (embedding <=> '${vectorString}'::vector) as similarity
+          FROM "DocumentChunk"
+          ORDER BY similarity DESC
+          LIMIT $1
+        `, limit);
+
+        const graphNodes: any = await prisma.$queryRawUnsafe(`
+          SELECT label, type, metadata, 1 - (embedding <=> '${vectorString}'::vector) as similarity
+          FROM "GraphNode"
+          ORDER BY similarity DESC
+          LIMIT $1
+        `, limit);
+
+        docContext = docChunks.map((c: any) => c.content).join('\n');
+        graphContext = graphNodes.map((n: any) => `${n.label} (${n.type}): ${n.metadata?.content || ''}`).join('\n');
+    } catch (dbErr) {
+        console.warn('⚠️ Vector DB unreachable, using In-Memory Semantic Search...');
+        
+        // 2. Fallback to Local In-Memory Vector Search
+        const localResults = localKnowledgeVectors
+            .map(node => ({
+                ...node,
+                similarity: cosineSimilarity(embedding, node.embedding)
+            }))
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, limit);
+        
+        graphContext = localResults.map(n => `${n.label} (${n.type}): ${n.content}`).join('\n');
+    }
+
+    return `### RELEVANT INFORMATION:\n${docContext}\n${graphContext}`;
   } catch (e: any) {
     console.error('searchVectorStore Error:', e.message);
     return await getKnowledgeContext();

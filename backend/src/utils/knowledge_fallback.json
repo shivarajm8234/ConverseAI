@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {
+      "label": "Ather 450X",
+      "type": "MODEL",
+      "content": "Price: 1.45 lakh. Range: 150 km. Top Speed: 90 kmph. 0-40 in 3.3 sec."
+    },
+    {
+      "label": "Ather 450S",
+      "type": "MODEL",
+      "content": "Price: 1.15 lakh. Range: 115 km. Top Speed: 90 kmph. Budget friendly model."
+    },
+    {
+      "label": "Ather Rizta",
+      "type": "MODEL",
+      "content": "Family scooter. Large storage space. Range: 123 km. Very comfortable seating."
+    },
+    {
+      "label": "Ather Grid",
+      "type": "TECH",
+      "content": "Fast charging network. 15km range in 10 mins charging. Over 1000+ points across India."
+    },
+    {
+      "label": "Ather Warranty",
+      "type": "POLICY",
+      "content": "5 years battery warranty. Pro-care plans available for service and roadside assistance."
+    },
+    {
+      "label": "Bangalore JP Nagar",
+      "type": "BRANCH",
+      "content": "Ather Space Indiranagar. Test rides available. Open 10 AM to 8 PM."
+    }
+  ]
+}

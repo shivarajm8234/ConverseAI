@@ -8,7 +8,7 @@ import { InferenceClient } from '@huggingface/inference';
 import axios from 'axios';
 import FormData from 'form-data';
 import { prisma } from './utils/db.js';
-import { getKnowledgeContext, chatModel, openai as aiClient } from './utils/ai.js';
+import { getKnowledgeContext, searchVectorStore, chatModel, openai as aiClient } from './utils/ai.js';
 
 // Load API keys
 const envPaths = [
@@ -27,10 +27,10 @@ const sarvamKey = process.env.SARVAM_API_KEY;
 const AI_MODEL = chatModel;
 const openai = aiClient;
 
-type LangCode = 'kn' | 'hi' | 'en';
+type LangCode = 'kn' | 'hi' | 'en' | 'ta' | 'te' | 'mr' | 'ml' | 'bn' | 'gu' | 'pa' | 'or';
 
-let activeKnowledgeCache = "Ather 450X price is Rs 1,45,000, 105km range, 90kmph top speed. Rizta family scooter available.";
 let fullTranscript = '';
+let userLang: LangCode = 'en';
 
 function log(msg: string) {
     try {
@@ -58,30 +58,44 @@ function agiCommand(cmd: string): string {
     }
 }
 
-async function prefetchKnowledge() {
-    try {
-        activeKnowledgeCache = await getKnowledgeContext();
-        log("🧠 Knowledge Prefetched.");
-    } catch (e) {
-        log("⚠️ Knowledge Prefetch Failed.");
-    }
-}
+async function askLLM(prompt: string, context: string): Promise<{ text: string, lang: LangCode }> {
+    const systemPrompt = `You are Shruti, the official AI Voice Assistant for Ather Energy.
+You support: English, Hindi, Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, and Odia.
 
-async function askLLM(prompt: string, context: string, userLang: LangCode) {
-    const systemPromptMap: Record<LangCode, string> = {
-        kn: 'ನೀವು ಅಥರ್ ಎನರ್ಜಿಯ ಅಧಿಕೃತ ಇವಿ ಸಹಾಯಕ ಶೃತಿ. ವೃತ್ತಿಪರ ಮತ್ತು ಸ್ನೇಹಪರರಾಗಿರಿ. ಸಣ್ಣ ಆದರೆ ವಿವರವಾದ ಉತ್ತರ ನೀಡಿ.',
-        hi: 'आप एथर एनर्जी की आधिकारिक ईवी सहायक श्रुति हैं। पेशेवर और मैत्रीपूर्ण रहें। संक्षिप्त लेकिन विस्तृत उत्तर दें।',
-        en: 'You are Shruti, the official AI Voice Assistant for Ather Energy. Be professional, friendly, and informative. Provide concise but complete answers (20-40 words).',
-    };
+KNOWLEDGE BASE:
+${context}
+
+Instructions:
+1. USE THE KNOWLEDGE BASE ABOVE. If the user asks for details (price, range, models), you MUST use the facts from the Knowledge Base.
+2. Respond in the EXACT language the user is speaking. If they change language, you MUST change with them.
+3. CRITICAL: All numbers, prices, and technical specifications MUST be written in English (e.g., "1.4 lakh", "150 km range").
+4. Be professional, helpful, and concise (20-45 words).
+5. Use plain text only. No markdown.
+6. Your response MUST start with the language code (kn, hi, en, ta, te, mr, ml, bn, gu, pa, or) followed by a newline.
+
+Example:
+kn
+ಅಥರ್ 450X ಬೆಲೆ 1.4 lakh ರೂಪಾಯಿ.`;
+
     const completion = await openai.chat.completions.create({
         model: AI_MODEL,
         messages: [
-            { role: 'system', content: `${systemPromptMap[userLang] || systemPromptMap.en}\n\nKNOWLEDGE BASE:\n${context}` },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt },
         ],
         max_tokens: 150,
     });
-    return completion.choices[0]?.message?.content ?? 'Repeat please?';
+    
+    const fullText = completion.choices[0]?.message?.content ?? 'en\nRepeat please?';
+    const lines = fullText.split('\n');
+    const tag = lines[0].trim().toLowerCase() as LangCode;
+    const content = lines.slice(1).join('\n').trim();
+    
+    const validTags: LangCode[] = ['kn', 'hi', 'en', 'ta', 'te', 'mr', 'ml', 'bn', 'gu', 'pa', 'or'];
+    if (validTags.includes(tag)) {
+        return { text: content || fullText, lang: tag };
+    }
+    return { text: fullText, lang: 'en' };
 }
 
 async function generateTTS(text: string, lang: LangCode) {
@@ -96,11 +110,21 @@ async function generateTTS(text: string, lang: LangCode) {
             headers: { 'api-subscription-key': sarvamKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 text,
-                target_language_code: lang === 'kn' ? 'kn-IN' : lang === 'hi' ? 'hi-IN' : 'en-IN',
+                target_language_code: 
+                    lang === 'kn' ? 'kn-IN' : 
+                    lang === 'hi' ? 'hi-IN' : 
+                    lang === 'ta' ? 'ta-IN' : 
+                    lang === 'te' ? 'te-IN' : 
+                    lang === 'mr' ? 'mr-IN' : 
+                    lang === 'ml' ? 'ml-IN' : 
+                    lang === 'bn' ? 'bn-IN' : 
+                    lang === 'gu' ? 'gu-IN' : 
+                    lang === 'pa' ? 'pa-IN' : 
+                    lang === 'or' ? 'or-IN' : 'en-IN',
                 model: 'bulbul:v3',
                 speech_sample_rate: 8000,
                 output_audio_codec: 'wav',
-                speaker: lang === 'kn' ? 'shruti' : 'neha'
+                speaker: (lang === 'kn') ? 'shruti' : (lang === 'hi' || lang === 'en') ? 'neha' : 'vani'
             })
         });
         const data: any = await res.json();
@@ -113,8 +137,8 @@ async function generateTTS(text: string, lang: LangCode) {
     }
 }
 
-async function transcribeSTT(wavFile: string): Promise<{ text: string; lang: LangCode }> {
-    if (!sarvamKey) return { text: '', lang: 'en' };
+async function transcribeSTT(wavFile: string): Promise<{ text: string }> {
+    if (!sarvamKey) return { text: '' };
     try {
         const form = new FormData();
         form.append('file', fs.createReadStream(wavFile));
@@ -127,13 +151,10 @@ async function transcribeSTT(wavFile: string): Promise<{ text: string; lang: Lan
             }
         });
         
-        const text = response.data.transcript || '';
-        // Sarvam doesn't always return language in the same way as Whisper, 
-        // we'll default to the last used or 'en' if unsure, or infer from text.
-        return { text, lang: 'en' }; 
+        return { text: response.data.transcript || '' };
     } catch (e: any) {
         log(`Sarvam STT Error: ${e.message}`);
-        return { text: '', lang: 'en' };
+        return { text: '' };
     }
 }
 
@@ -178,8 +199,7 @@ async function main() {
     }
 
     log("Agent Started");
-    await prefetchKnowledge();
-    await generateTTS("ನಮಸ್ಕಾರ! ನಾನು ಅಥರ್ ಶೋರೂಮ್‌ನಿಂದ ಶೃತಿ. ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?", 'kn');
+    await generateTTS("Hello! I am Shruti from Ather Energy. How can I help you today?", 'en');
 
     let seq = 0;
     while (true) {
@@ -189,13 +209,17 @@ async function main() {
         
         const wav = `${base}.wav`;
         if (fs.existsSync(wav) && fs.statSync(wav).size > 1000) {
-            const { text, lang } = await transcribeSTT(wav);
+            const { text } = await transcribeSTT(wav);
             log(`User: ${text}`);
             if (text.length > 1) {
-                const reply = await askLLM(text, activeKnowledgeCache, lang);
-                log(`AI: ${reply}`);
+                // INTEGRATED KNOWLEDGE SEARCH
+                const context = await searchVectorStore(text, 3);
+                const { text: reply, lang: detectedLang } = await askLLM(text, context);
+                
+                log(`AI (${detectedLang}): ${reply}`);
+                userLang = detectedLang;
                 fullTranscript += `User: ${text}\nAI: ${reply}\n`;
-                await generateTTS(reply, lang);
+                await generateTTS(reply, userLang);
             }
         }
     }

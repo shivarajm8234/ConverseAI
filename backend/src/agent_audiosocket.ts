@@ -74,16 +74,13 @@ KNOWLEDGE BASE:
 ${context}
 
 Instructions:
-1. YOUR MAIN GOAL: Provide specific details from the KNOWLEDGE BASE above.
-2. If the user asks about a product (450X, 450S, Rizta), explain its features, price, and range using the provided facts.
-3. Be professional, helpful, and concise (20-45 words).
-4. Do NOT just greet the user. Answer their question directly with details.
+1. USE THE KNOWLEDGE BASE ABOVE. If the information is there, you MUST use it. Do not use general facts if specific facts are provided.
+2. Respond in the EXACT language the user is speaking. If they change language, you MUST change with them.
+3. CRITICAL: All numbers, prices, and technical specifications (range, top speed, battery capacity, dates) MUST be written in English (e.g., "1.4 lakh", "150 km range").
+4. Be professional, helpful, and concise (20-45 words).
 5. Use plain text only. No markdown.
-6. CRITICAL: Start your response with the language code (kn-IN, hi-IN, or en-IN) followed by a newline.
-
-Example:
-en-IN
-The Ather 450X starts at 1.4 lakh rupees and features a top speed of 90 kmph with a range of 150 kilometers.`;
+6. CRITICAL: Your response MUST start with the language code (kn-IN, hi-IN, en-IN, ta-IN, te-IN, mr-IN, ml-IN, bn-IN, gu-IN, pa-IN, or-IN) followed by a newline.
+7. If you are unsure of the language, default to en-IN.`;
 
     try {
         const stream = await aiClient.chat.completions.create({
@@ -107,10 +104,10 @@ The Ather 450X starts at 1.4 lakh rupees and features a top speed of 90 kmph wit
 const server = net.createServer((socket) => {
     const callId = Math.random().toString(36).substring(7);
     console.log(`[${callId}] 📞 Real-time Call Connected`);
-    
+
     const state: CallState = {
         transcript: '',
-        lang: 'kn-IN', 
+        lang: 'kn-IN',
         isAiTalking: false,
         abortController: null,
         startTime: Date.now(),
@@ -127,9 +124,9 @@ const server = net.createServer((socket) => {
             sarvamWs.removeAllListeners();
             sarvamWs.close();
         }
-        
+
         sarvamWs = new WebSocket('wss://api.sarvam.ai/speech-to-text/ws');
-        
+
         sarvamWs.on('open', () => {
             sarvamWs?.send(JSON.stringify({
                 config: {
@@ -146,10 +143,10 @@ const server = net.createServer((socket) => {
             if (msg.transcript && msg.is_final) {
                 const userText = msg.transcript.trim();
                 if (userText.length < 2) return;
-                
+
                 console.log(`👤 [${callId}] User [${state.lang}]: ${userText}`);
                 state.transcript += `User: ${userText}\n`;
-                
+
                 if (state.isAiTalking && state.abortController) {
                     state.abortController.abort();
                 }
@@ -157,14 +154,14 @@ const server = net.createServer((socket) => {
                 state.isAiTalking = true;
                 state.abortController = new AbortController();
                 const signal = state.abortController.signal;
-                
+
                 try {
                     // Start vector search in parallel
                     const contextPromise = searchVectorStore(userText, 3);
                     const context = await contextPromise;
-                    
+
                     const llmStream = askLLMStream(userText, context, state.lang);
-                    
+
                     let detectedLang: LangCode = state.lang;
                     let fullReply = '';
                     let currentSentence = '';
@@ -182,11 +179,11 @@ const server = net.createServer((socket) => {
                                 hasParsedLang = true;
                                 const parts = firstLine.split('\n');
                                 const tagMatch = parts[0].trim().match(/^(kn-IN|hi-IN|en-IN)/);
-                                
+
                                 if (tagMatch) {
                                     detectedLang = tagMatch[1] as LangCode;
                                     currentSentence = parts.slice(1).join('\n');
-                                    
+
                                     if (detectedLang !== state.lang) {
                                         console.log(`🌍 [${callId}] Switching to: ${detectedLang}`);
                                         state.lang = detectedLang;
@@ -219,7 +216,7 @@ const server = net.createServer((socket) => {
                     if (!signal.aborted && currentSentence.trim().length > 2) {
                         await playAudio(socket, currentSentence.trim(), detectedLang, state, signal);
                     }
-                    
+
                     state.transcript += `AI: ${fullReply.split('\n').slice(1).join(' ')}\n`;
 
                 } catch (e) {
@@ -236,17 +233,17 @@ const server = net.createServer((socket) => {
         console.log(`🤖 [${callId}] AI (${lang}): ${text}`);
         const audio = await generateTTS(text, lang);
         if (audio && !signal.aborted) {
-            const CHUNK_SIZE = 1600; 
+            const CHUNK_SIZE = 1600;
             for (let i = 0; i < audio.length; i += CHUNK_SIZE) {
                 if (signal.aborted) break;
                 socket.write(createAudioFrame(audio.slice(i, i + CHUNK_SIZE)));
-                await new Promise(r => setTimeout(r, 40)); 
+                await new Promise(r => setTimeout(r, 40));
             }
         }
     }
 
     // Start with Multilingual discovery
-    startStreaming('en-IN'); 
+    startStreaming('en-IN');
 
     socket.on('data', (data) => {
         audioBuffer = Buffer.concat([audioBuffer, data]);
@@ -268,9 +265,9 @@ const server = net.createServer((socket) => {
         if (state.transcript.length > 5) {
             try {
                 const duration = Math.floor((Date.now() - state.startTime) / 1000);
-                const customer = await prisma.customer.findFirst({ where: { phone: 'WebRTC' } }) 
+                const customer = await prisma.customer.findFirst({ where: { phone: 'WebRTC' } })
                     || await prisma.customer.create({ data: { phone: 'WebRTC', name: 'Web User' } });
-                
+
                 await prisma.call.create({
                     data: {
                         customerId: customer.id,
