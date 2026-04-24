@@ -8,6 +8,7 @@ import { Slots } from './pages/Slots'
 import { Automation } from './pages/Automation'
 import { Knowledge } from './pages/Knowledge'
 import { Agent } from './pages/Agent'
+import { Connection } from './pages/Connection'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +32,7 @@ function App() {
             <Route path="/automation" element={<Automation />} />
             <Route path="/knowledge" element={<Knowledge />} />
             <Route path="/agent" element={<Agent />} />
+            <Route path="/connection" element={<Connection />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

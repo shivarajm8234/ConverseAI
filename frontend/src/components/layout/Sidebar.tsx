@@ -11,6 +11,7 @@ import {
   Mic2,
   Network,
   Bot,
+  Settings2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +23,7 @@ const navItems = [
   { icon: Calendar, label: 'Filled Slots', path: '/slots' },
   { icon: Sparkles, label: 'Automation center', path: '/automation' },
   { icon: Network, label: 'Knowledge Graph', path: '/knowledge' },
+  { icon: Settings2, label: 'Connection', path: '/connection' },
 ]
 
 export function Sidebar() {

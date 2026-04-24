@@ -27,12 +27,15 @@ export const processNewFile = async (fileUrl: string, fileName: string, mimeType
   const buffer = Buffer.from(response.data);
   let content = buffer.toString('utf-8'); 
   
-  // Vector index (zero-vector placeholder formatted as string)
-  const zeroVectorStr = `[${new Array(1536).fill(0).join(',')}]`;
-  await prisma.$executeRaw`
-      INSERT INTO "DocumentChunk" (id, content, embedding, metadata, "createdAt")
-      VALUES (gen_random_uuid(), ${content}, ${zeroVectorStr}::vector, ${JSON.stringify({ fileName, mimeType })}::jsonb, NOW())
-    `;
+  // Real Vector Indexing
+  const embedding = await ai.getEmbeddings(content);
+  if (embedding) {
+    const vectorStr = `[${embedding.join(',')}]`;
+    await prisma.$executeRawUnsafe(`
+        INSERT INTO "DocumentChunk" (id, content, embedding, metadata, "createdAt")
+        VALUES (gen_random_uuid(), $1, '${vectorStr}'::vector, $2, NOW())
+      `, content, JSON.stringify({ fileName, mimeType }));
+  }
 
   await updateGraphFromContent(content, fileName);
   
@@ -42,11 +45,15 @@ export const processNewFile = async (fileUrl: string, fileName: string, mimeType
 };
 
 export const processNewText = async (text: string, sourceName: string) => {
-  const zeroVectorStr = `[${new Array(1536).fill(0).join(',')}]`;
-  await prisma.$executeRaw`
-      INSERT INTO "DocumentChunk" (id, content, embedding, metadata, "createdAt")
-      VALUES (gen_random_uuid(), ${text}, ${zeroVectorStr}::vector, ${JSON.stringify({ source: sourceName, type: 'text' })}::jsonb, NOW())
-    `;
+  // Real Vector Indexing
+  const embedding = await ai.getEmbeddings(text);
+  if (embedding) {
+    const vectorStr = `[${embedding.join(',')}]`;
+    await prisma.$executeRawUnsafe(`
+        INSERT INTO "DocumentChunk" (id, content, embedding, metadata, "createdAt")
+        VALUES (gen_random_uuid(), $1, '${vectorStr}'::vector, $2, NOW())
+      `, text, JSON.stringify({ source: sourceName, type: 'text' }));
+  }
 
   await updateGraphFromContent(text, sourceName);
   return sourceName;

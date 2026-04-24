@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import dotenv from 'dotenv';
+import axios from 'axios';
 import * as ai from '../../utils/ai.js';
 import * as crm from '../crm/index.js';
 
@@ -10,7 +11,33 @@ if (process.env.TWILIO_SID && process.env.TWILIO_SID.startsWith('AC') && process
     client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 }
 
+/**
+ * Automatically fetch the public IP address of the server.
+ */
+async function getPublicIP(): Promise<string | null> {
+    try {
+        const response = await axios.get('https://api.ipify.org?format=json', { timeout: 5000 });
+        return response.data.ip;
+    } catch (error) {
+        console.error('⚠️ Failed to fetch public IP automatically:', (error as Error).message);
+        return null;
+    }
+}
+
 export const init = async () => {
+    // Automatically resolve PUBLIC_IP if it's the placeholder or empty
+    const currentIP = process.env.PUBLIC_IP;
+    if (!currentIP || currentIP === 'your-public-ip-or-ngrok' || currentIP.trim() === '') {
+        console.log('🔍 PUBLIC_IP not set, attempting to fetch automatically...');
+        const detectedIP = await getPublicIP();
+        if (detectedIP) {
+            process.env.PUBLIC_IP = detectedIP;
+            console.log(`🌐 Automatically detected Public IP: ${detectedIP}`);
+        } else {
+            console.warn('⚠️ Could not detect Public IP. Calls may fail unless PUBLIC_IP is set in .env');
+        }
+    }
+
     if (client) {
         console.log('📞 Voice Call Module initialized (Twilio).');
     } else {

@@ -32,6 +32,28 @@ export function Calls() {
     const [pbxWebsocketIp, setPbxWebsocketIp] = useState(window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname);
 
     useEffect(() => {
+        // Automatically fetch IP config from backend
+        fetch(apiUrl('/config'))
+            .then(res => res.json())
+            .then(data => {
+                const isLocalAccess = /^(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(window.location.hostname);
+                
+                // If we are accessing via local network, prefer the local IP
+                const preferredIp = isLocalAccess ? (data.localIp || window.location.hostname) : (data.publicIp || window.location.hostname);
+                
+                if (preferredIp && preferredIp !== 'localhost') {
+                    setPbxWebsocketIp(preferredIp);
+                    
+                    // Update the Phone LAN IP if it's still default
+                    if (pbxLocalIp === '10.155.237.157' || !localStorage.getItem('converse_pbx_ip')) {
+                        setPbxLocalIp(data.localIp || preferredIp);
+                    }
+                }
+            })
+            .catch(err => console.error('Failed to fetch server config:', err));
+    }, []);
+
+    useEffect(() => {
         localStorage.setItem('converse_pbx_ip', pbxLocalIp);
     }, [pbxLocalIp]);
 
@@ -172,34 +194,40 @@ export function Calls() {
                         </div>
 
                         <div className="space-y-4">
-                            <div className="space-y-1">
-                                <label className="text-xs text-slate-500 uppercase font-bold tracking-wider ml-1">Note / CRM ID (optional)</label>
-                                <input
-                                    value={originalNumber}
-                                    onChange={(e) => setOriginalNumber(e.target.value)}
-                                    className="w-full p-4 bg-black/40 border border-blue-500/20 focus:border-blue-500/50 outline-none rounded-2xl text-white font-mono transition-all"
-                                    placeholder="not sent to Asterisk"
-                                />
+                            <button
+                                onClick={async () => {
+                                    if (sipStatus !== 'Connected (WebRTC)') {
+                                        connectSIP();
+                                        // Wait a bit for connection
+                                        await new Promise(r => setTimeout(r, 1500));
+                                    }
+                                    setTargetNumber('3000');
+                                    makeWebRTCCall();
+                                }}
+                                className="w-full group relative flex items-center justify-center gap-3 p-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-2xl text-white font-bold transition-all shadow-xl active:scale-95 mb-4"
+                            >
+                                <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition-opacity" />
+                                <Phone size={24} fill="currentColor" className="animate-pulse" />
+                                <span className="relative">Direct Talk to AI Agent</span>
+                            </button>
+
+                            <div className="relative">
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="w-full border-t border-white/5"></div>
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase font-bold">
+                                    <span className="bg-slate-900/60 px-2 text-slate-500">or manual dialer</span>
+                                </div>
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs text-slate-500 uppercase font-bold tracking-wider ml-1">Extension to dial (WebRTC)</label>
+                                <label className="text-xs text-slate-500 uppercase font-bold tracking-wider ml-1">Extension to dial</label>
                                 <input
                                     value={targetNumber}
                                     onChange={(e) => setTargetNumber(e.target.value)}
                                     className="w-full p-4 bg-black/40 border border-blue-500/20 focus:border-blue-500/50 outline-none rounded-2xl text-white font-mono transition-all"
-                                    placeholder="3000 = AI, 2000 = mobile, 1001 = WebRTC peer"
+                                    placeholder="3000 = AI, 2000 = mobile"
                                 />
-                            </div>
-
-                            <div className="pt-2 flex gap-3">
-                                <button
-                                    onClick={connectSIP}
-                                    className="flex-1 flex items-center justify-center gap-2 p-3 bg-slate-800 hover:bg-slate-700/80 rounded-xl text-slate-300 font-bold transition-all text-sm border border-slate-700"
-                                >
-                                    <Wifi size={16} />
-                                    Connect SIP
-                                </button>
                             </div>
 
                             <div className="flex gap-2 mt-4">
@@ -209,8 +237,7 @@ export function Calls() {
                                     className="flex-1 group relative flex items-center justify-center gap-2 p-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl text-white font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:grayscale"
                                 >
                                     <PhoneOutgoing size={18} fill="currentColor" />
-                                    Dial (WebRTC)
-                                    <div className="absolute inset-0 bg-emerald-400 blur-2xl opacity-0 group-hover:opacity-20 transition-opacity" />
+                                    Dial
                                 </button>
 
                                 <button
@@ -223,7 +250,13 @@ export function Calls() {
                                 </button>
                             </div>
 
-                            <p className="text-center text-xs text-blue-400 font-medium tracking-wide">Status: {sipStatus}</p>
+                            <div className="flex items-center justify-center gap-2 mt-2">
+                                <div className={`w-2 h-2 rounded-full ${sipStatus.includes('Connected') ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                <p className="text-center text-xs text-blue-400 font-medium tracking-wide">Status: {sipStatus}</p>
+                                {sipStatus === 'Disconnected' && (
+                                    <button onClick={connectSIP} className="text-[10px] text-blue-500 underline ml-2">Re-connect</button>
+                                )}
+                            </div>
 
                             {/* Invisible audio element to play remote stream */}
                             <audio ref={audioRef} style={{ display: 'none' }} autoPlay />

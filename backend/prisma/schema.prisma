@@ -67,7 +67,7 @@ model Booking {
 model DocumentChunk {
   id        String   @id @default(uuid())
   content   String
-  embedding Unsupported("vector(1536)")?
+  embedding Unsupported("vector(384)")?
   metadata  Json?
   createdAt DateTime @default(now())
 }
@@ -85,6 +85,7 @@ model GraphNode {
   id        String      @id @default(uuid())
   label     String
   type      String      @default("ENTITY") // ENTITY, CONCEPT, etc.
+  embedding Unsupported("vector(384)")?
   metadata  Json?
   sources   GraphEdge[] @relation("source")
   targets   GraphEdge[] @relation("target")

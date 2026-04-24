@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import os from 'os';
 import * as telegram from './modules/telegram/index.js';
 import * as knowledge from './modules/knowledge/index.js';
 import * as calling from './modules/calling/index.js';
 import * as crm from './modules/crm/index.js';
 import { prisma } from './utils/db.js';
+import { getEmbeddings } from './utils/ai.js';
 
 dotenv.config();
 
@@ -19,6 +21,27 @@ app.use(express.json());
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// Config endpoint for IP discovery
+app.get('/api/config', (req, res) => {
+    let localIp = 'localhost';
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]!) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                localIp = iface.address;
+                break;
+            }
+        }
+        if (localIp !== 'localhost') break;
+    }
+
+    res.json({
+        publicIp: process.env.PUBLIC_IP || localIp,
+        localIp: localIp,
+        port: port
+    });
 });
 
 // --- API ENDPOINTS FOR FRONTEND ---
@@ -107,14 +130,32 @@ app.get('/api/graph', async (req, res) => {
 app.post('/api/graph', async (req, res) => {
     try {
         const { label, content, type = 'MANUAL_ENTRY' } = req.body;
-        const node = await prisma.graphNode.create({
-            data: {
-                label,
-                type,
-                metadata: { content }
-            }
-        });
-        res.json(node);
+        
+        // 1. Generate embedding for the node
+        const fullContent = `${label}: ${content}`;
+        const embedding = await getEmbeddings(fullContent);
+        
+        // 2. Create the Graph Node with embedding
+        let node;
+        if (embedding) {
+            const vectorString = `[${embedding.join(',')}]`;
+            node = await prisma.$queryRawUnsafe(`
+                INSERT INTO "GraphNode" (id, label, type, metadata, embedding, "createdAt")
+                VALUES (gen_random_uuid(), $1, $2, $3, '${vectorString}'::vector, now())
+                RETURNING *
+            `, label, type, { content });
+            console.log(`✅ Vectorized graph node created: ${label}`);
+            res.json((node as any)[0]);
+        } else {
+            node = await prisma.graphNode.create({
+                data: {
+                    label,
+                    type,
+                    metadata: { content }
+                }
+            });
+            res.json(node);
+        }
     } catch (e) {
         console.error('POST /api/graph failed:', e);
         res.status(500).json({ error: 'Failed to create node' });

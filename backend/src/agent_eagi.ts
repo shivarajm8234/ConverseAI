@@ -5,8 +5,10 @@ import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { InferenceClient } from '@huggingface/inference';
+import axios from 'axios';
+import FormData from 'form-data';
 import { prisma } from './utils/db.js';
-import { getKnowledgeContext } from './utils/ai.js';
+import { getKnowledgeContext, chatModel, openai as aiClient } from './utils/ai.js';
 
 // Load API keys
 const envPaths = [
@@ -21,13 +23,9 @@ for (const envPath of envPaths) {
     }
 }
 
-const groqKey = process.env.GROQ_API_KEY;
-const openai = new OpenAI({
-    apiKey: groqKey || process.env.OPENAI_API_KEY,
-    baseURL: groqKey ? "https://api.groq.com/openai/v1" : undefined
-});
-const AI_MODEL = groqKey ? (process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile") : "gpt-4o-mini";
 const sarvamKey = process.env.SARVAM_API_KEY;
+const AI_MODEL = chatModel;
+const openai = aiClient;
 
 type LangCode = 'kn' | 'hi' | 'en';
 
@@ -71,17 +69,17 @@ async function prefetchKnowledge() {
 
 async function askLLM(prompt: string, context: string, userLang: LangCode) {
     const systemPromptMap: Record<LangCode, string> = {
-        kn: 'ನೀವು ಅಥರ್ ಎನರ್ಜಿ ಶೋರೂಮ್‌ನ ಇವಿ ಅಸಿಸ್ಟೆಂಟ್ ಶೃತಿ. ಗ್ರಾಹಕರಿಗೆ ಸಣ್ಣ ಉತ್ತರ ನೀಡಿ.',
-        hi: 'आप एथर एनर्जी शोरूम की ईवी सहायक श्रुति हैं। संक्षिप्त उत्तर दें।',
-        en: 'You are Shruti, an EV Assistant at Ather Energy. Keep answers very concise (under 30 words).',
+        kn: 'ನೀವು ಅಥರ್ ಎನರ್ಜಿಯ ಅಧಿಕೃತ ಇವಿ ಸಹಾಯಕ ಶೃತಿ. ವೃತ್ತಿಪರ ಮತ್ತು ಸ್ನೇಹಪರರಾಗಿರಿ. ಸಣ್ಣ ಆದರೆ ವಿವರವಾದ ಉತ್ತರ ನೀಡಿ.',
+        hi: 'आप एथर एनर्जी की आधिकारिक ईवी सहायक श्रुति हैं। पेशेवर और मैत्रीपूर्ण रहें। संक्षिप्त लेकिन विस्तृत उत्तर दें।',
+        en: 'You are Shruti, the official AI Voice Assistant for Ather Energy. Be professional, friendly, and informative. Provide concise but complete answers (20-40 words).',
     };
     const completion = await openai.chat.completions.create({
         model: AI_MODEL,
         messages: [
-            { role: 'system', content: `${systemPromptMap[userLang] || systemPromptMap.en} Context: ${context}` },
+            { role: 'system', content: `${systemPromptMap[userLang] || systemPromptMap.en}\n\nKNOWLEDGE BASE:\n${context}` },
             { role: 'user', content: prompt },
         ],
-        max_tokens: 100,
+        max_tokens: 150,
     });
     return completion.choices[0]?.message?.content ?? 'Repeat please?';
 }
@@ -116,18 +114,26 @@ async function generateTTS(text: string, lang: LangCode) {
 }
 
 async function transcribeSTT(wavFile: string): Promise<{ text: string; lang: LangCode }> {
+    if (!sarvamKey) return { text: '', lang: 'en' };
     try {
-        const tr = await openai.audio.transcriptions.create({
-            file: fs.createReadStream(wavFile) as any,
-            model: 'whisper-large-v3',
-            response_format: 'verbose_json',
+        const form = new FormData();
+        form.append('file', fs.createReadStream(wavFile));
+        form.append('model', 'saarika:v1');
+        
+        const response = await axios.post('https://api.sarvam.ai/speech-to-text', form, {
+            headers: {
+                'api-subscription-key': sarvamKey,
+                ...form.getHeaders()
+            }
         });
-        const text = tr.text ?? '';
-        const lang = (tr as any).language === 'kannada' ? 'kn' : (tr as any).language === 'hindi' ? 'hi' : 'en';
-        return { text, lang: lang as LangCode };
+        
+        const text = response.data.transcript || '';
+        // Sarvam doesn't always return language in the same way as Whisper, 
+        // we'll default to the last used or 'en' if unsure, or infer from text.
+        return { text, lang: 'en' }; 
     } catch (e: any) {
-        log(`STT Error: ${e.message}`);
-        return { text: '', lang: 'kn' };
+        log(`Sarvam STT Error: ${e.message}`);
+        return { text: '', lang: 'en' };
     }
 }
 
