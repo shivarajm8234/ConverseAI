@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "agent": "tsx src/agent_eagi.ts",
+    "audiosocket": "tsx src/agent_audiosocket.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
