@@ -1,0 +1,45 @@
+services:
+  asterisk:
+    build: .
+    container_name: asterisk
+    volumes:
+      # 1. Mount configuration files
+      - ./asterisk_config:/etc/asterisk
+      
+      # 2. Mount the AGI Agent executable
+      # Note: We mount the built file specifically to the path expected by the dialplan
+      - ./backend/dist/agent_eagi.js:/var/lib/asterisk/agi-bin/agent_eagi.js:ro
+      
+      # 3. Mount the backend directory (for .env access)
+      - ./backend:/opt/converse/backend:ro
+      
+      # 4. Map node_modules so the AGI script can find its dependencies
+      # The script is in /var/lib/asterisk/agi-bin/, so it looks in /var/lib/asterisk/agi-bin/node_modules
+      - ./backend/node_modules:/var/lib/asterisk/agi-bin/node_modules:ro
+      
+      # 5. ESM support hint (package.json)
+      - ./backend/package.json:/var/lib/asterisk/agi-bin/package.json:ro
+      
+      # 6. Persistent logs (optional but helpful)
+      - asterisk_logs:/var/log/asterisk
+      - /tmp:/tmp
+
+    ports:
+      # SIP UDP (Standard)
+      - "5060:5060/udp"
+      # SIP TCP
+      - "5060:5060/tcp"
+      # HTTP / WebRTC WebSocket
+      - "8088:8088/tcp"
+      # RTP Range (Narrowed for Docker Desktop performance)
+      - "10000-10100:10000-10100/udp"
+
+    # Ensure asterisk starts after backend is ready (if backend was a container)
+    # Since backend is on host for now, we just start.
+    restart: unless-stopped
+    
+    # Use bridge mode (host mode is not supported efficiently on Windows Docker)
+    network_mode: bridge
+
+volumes:
+  asterisk_logs:
