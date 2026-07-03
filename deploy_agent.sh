@@ -27,6 +27,8 @@ fi
 
 echo "📦 Installing agent + configs..."
 sudo install -m 0755 -o root -g asterisk "$DIST" "$AGI_BIN/agent_eagi.js"
+sudo cp -r backend/dist/utils "$AGI_BIN/"
+sudo chown -R asterisk:asterisk "$AGI_BIN/utils"
 sudo install -m 0644 -o root -g root "$SCRIPT_DIR/asterisk_config/extensions.conf" /etc/asterisk/extensions.conf
 # Keep SIP/RTP in sync so phones registered as 2000 use context=internal and can dial 3000 → AI agent.
 for f in pjsip.conf rtp.conf http.conf; do

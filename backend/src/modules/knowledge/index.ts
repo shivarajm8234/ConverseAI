@@ -30,7 +30,7 @@ export const processNewFile = async (fileUrl: string, fileName: string, mimeType
   // Real Vector Indexing
   const embedding = await ai.getEmbeddings(content);
   if (embedding) {
-    const vectorStr = `[${embedding.join(',')}]`;
+    const vectorStr = `[${(embedding as number[]).join(',')}]`;
     await prisma.$executeRawUnsafe(`
         INSERT INTO "DocumentChunk" (id, content, embedding, metadata, "createdAt")
         VALUES (gen_random_uuid(), $1, '${vectorStr}'::vector, $2, NOW())
@@ -48,7 +48,7 @@ export const processNewText = async (text: string, sourceName: string) => {
   // Real Vector Indexing
   const embedding = await ai.getEmbeddings(text);
   if (embedding) {
-    const vectorStr = `[${embedding.join(',')}]`;
+    const vectorStr = `[${(embedding as number[]).join(',')}]`;
     await prisma.$executeRawUnsafe(`
         INSERT INTO "DocumentChunk" (id, content, embedding, metadata, "createdAt")
         VALUES (gen_random_uuid(), $1, '${vectorStr}'::vector, $2, NOW())

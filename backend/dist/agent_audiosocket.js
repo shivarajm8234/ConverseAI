@@ -5,7 +5,6 @@ import path from 'path';
 import { WebSocket } from 'ws';
 import OpenAI from 'openai';
 import { prisma } from './utils/db.js';
-
 // Load Environment
 const envPaths = [
     path.join(process.cwd(), '.env'),
@@ -17,19 +16,16 @@ for (const envPath of envPaths) {
         break;
     }
 }
-
 const sarvamKey = process.env.SARVAM_API_KEY;
 const AUDIOSOCKET_PORT = 9092;
 const SAMPLE_RATE = 8000;
-
 // Configure OpenAI client to use Sarvam for LLM
 const aiClient = new OpenAI({
     apiKey: sarvamKey,
     baseURL: 'https://api.sarvam.ai',
-    defaultHeaders: { 'api-subscription-key': sarvamKey! }
+    defaultHeaders: { 'api-subscription-key': sarvamKey }
 });
 const AI_MODEL = 'gajendra:v1';
-
 const COMMUNITY_SUPPORT_PROMPT = `You are a real-time voice reporting assistant for an informal settlement (slum) resource tracking system.
 
 LANGUAGE RULE (STRICT):
@@ -78,49 +74,43 @@ OUTPUT STYLE:
 * CRITICAL: Your response MUST start with the language code (kn-IN, hi-IN, or en-IN) followed by a newline.
 
 You are only a listener and data collector for the community accountability loop. Nothing more.`;
-
-function log(msg: string) {
+function log(msg) {
     try {
         fs.appendFileSync('/tmp/agent_audiosocket.log', `[${new Date().toISOString()}] ${msg}\n`);
         console.log(msg);
-    } catch {}
+    }
+    catch { }
 }
-
-function createAudioSocketHeader(id: number, length: number): Buffer {
+function createAudioSocketHeader(id, length) {
     const header = Buffer.alloc(3);
     header[0] = id;
     header.writeUInt16BE(length, 1);
     return header;
 }
-
 class CallSession {
-    socket: net.Socket;
-    sttWs: WebSocket | null = null;
-    fullTranscript: string[] = []; // Store as array of objects for better context
-    isAitalking: boolean = false;
-    phone: string = 'unknown';
-    currentLanguage: 'kn-IN' | 'hi-IN' | 'en-IN' | null = null;
-    abortController: AbortController | null = null;
-    startTime: number = Date.now();
-
-    constructor(socket: net.Socket) {
+    socket;
+    sttWs = null;
+    fullTranscript = []; // Store as array of objects for better context
+    isAitalking = false;
+    phone = 'unknown';
+    currentLanguage = null;
+    abortController = null;
+    startTime = Date.now();
+    constructor(socket) {
         this.socket = socket;
     }
-
     async init() {
         log("📞 Community Support Call Started");
         this.setupSarvamSTT();
-
         // Step 1: Greeting
         await this.speak("ನಮಸ್ತೆ. ನೀವು ಇಂದು ಯಾವ ಹಂಚಿಕೆಯ ಸಂಪನ್ಮೂಲ ಸಮಸ್ಯೆ ಅಥವಾ ವ್ಯರ್ಥವನ್ನು ವರದಿ ಮಾಡುತ್ತಿದ್ದೀರಿ? ನೀರು, ವಿದ್ಯುತ್ ಅಥವಾ ಕಸ?", 'kn-IN', new AbortController().signal);
     }
-
     setupSarvamSTT() {
-        if (!sarvamKey) return;
+        if (!sarvamKey)
+            return;
         this.sttWs = new WebSocket('wss://api.sarvam.ai/speech-to-text/ws', {
             headers: { 'api-subscription-key': sarvamKey }
         });
-
         this.sttWs.on('open', () => {
             this.sttWs?.send(JSON.stringify({
                 config: {
@@ -132,11 +122,9 @@ class CallSession {
                 }
             }));
         });
-
         this.sttWs.on('error', (err) => {
             log(`STT WebSocket Error: ${err.message}`);
         });
-
         this.sttWs.on('message', async (data) => {
             const msg = JSON.parse(data.toString());
             if (msg.transcript && this.isAitalking) {
@@ -152,51 +140,45 @@ class CallSession {
             }
         });
     }
-
-    async handleUserIntent(text: string) {
+    async handleUserIntent(text) {
         try {
             this.abortController = new AbortController();
             const signal = this.abortController.signal;
-            
-            this.fullTranscript.push({ role: 'user', content: text } as any);
-
+            this.fullTranscript.push({ role: 'user', content: text });
             const messages = [
                 { role: 'system', content: COMMUNITY_SUPPORT_PROMPT },
                 ...this.fullTranscript.slice(-10) // Keep last 10 turns for context
             ];
-
             const stream = await aiClient.chat.completions.create({
                 model: AI_MODEL,
-                messages: messages as any,
+                messages: messages,
                 stream: true,
             }, { signal });
-
             let fullReply = '';
             let currentSentence = '';
             let hasParsedLang = false;
             let detectedLang = this.currentLanguage || 'en-IN';
-
             for await (const chunk of stream) {
-                if (signal.aborted) break;
+                if (signal.aborted)
+                    break;
                 const content = chunk.choices[0]?.delta?.content || '';
                 fullReply += content;
-
                 if (!hasParsedLang) {
                     if (fullReply.includes('\n')) {
                         const parts = fullReply.split('\n');
-                        const langTag = parts[0]!.trim();
+                        const langTag = parts[0].trim();
                         if (langTag === 'kn-IN' || langTag === 'hi-IN' || langTag === 'en-IN') {
-                            detectedLang = langTag as any;
+                            detectedLang = langTag;
                             this.currentLanguage = detectedLang;
                             currentSentence = parts.slice(1).join('\n');
-                        } else {
+                        }
+                        else {
                             currentSentence = fullReply;
                         }
                         hasParsedLang = true;
                     }
                     continue;
                 }
-
                 currentSentence += content;
                 if (/[.!?\n।]/.test(currentSentence)) {
                     const sentences = currentSentence.split(/(?<=[.!?\n।] )/);
@@ -209,22 +191,21 @@ class CallSession {
                     }
                 }
             }
-
             if (!signal.aborted && currentSentence.trim().length > 1) {
                 await this.speak(currentSentence.trim(), detectedLang, signal);
             }
-
-            this.fullTranscript.push({ role: 'assistant', content: fullReply } as any);
-        } catch (e: any) {
-            if (e.name !== 'AbortError') log(`LLM Error: ${e.message}`);
+            this.fullTranscript.push({ role: 'assistant', content: fullReply });
+        }
+        catch (e) {
+            if (e.name !== 'AbortError')
+                log(`LLM Error: ${e.message}`);
         }
     }
-
-    async speak(text: string, lang: string, signal: AbortSignal) {
-        if (!sarvamKey || signal.aborted) return;
+    async speak(text, lang, signal) {
+        if (!sarvamKey || signal.aborted)
+            return;
         this.isAitalking = true;
         log(`🤖 AI (${lang}): ${text}`);
-
         try {
             const response = await fetch('https://api.sarvam.ai/text-to-speech/stream', {
                 method: 'POST',
@@ -239,48 +220,49 @@ class CallSession {
                 }),
                 signal
             });
-
-            if (!response.body) return;
+            if (!response.body)
+                return;
             const reader = response.body.getReader();
-
             while (true) {
-                if (signal.aborted) break;
+                if (signal.aborted)
+                    break;
                 const { done, value } = await reader.read();
-                if (done) break;
-
+                if (done)
+                    break;
                 let offset = 0;
                 while (offset < value.length) {
-                    if (signal.aborted) break;
+                    if (signal.aborted)
+                        break;
                     const chunkSize = Math.min(value.length - offset, 320);
                     const payload = value.slice(offset, offset + chunkSize);
                     this.socket.write(Buffer.concat([createAudioSocketHeader(0x10, payload.length), payload]));
                     offset += chunkSize;
                 }
             }
-        } catch (e: any) {
-            if (e.name !== 'AbortError') log(`TTS Error: ${e.message}`);
-        } finally {
+        }
+        catch (e) {
+            if (e.name !== 'AbortError')
+                log(`TTS Error: ${e.message}`);
+        }
+        finally {
             this.isAitalking = false;
         }
     }
-
-    handleAudioFromAsterisk(data: Buffer) {
+    handleAudioFromAsterisk(data) {
         if (this.sttWs?.readyState === WebSocket.OPEN) {
             this.sttWs.send(data);
         }
     }
-
     async cleanup() {
         log("🏁 Call Ended");
         this.sttWs?.close();
         this.abortController?.abort();
-
         if (this.fullTranscript.length > 2) {
             try {
                 let customer = await prisma.customer.findFirst({ where: { phone: this.phone } });
-                if (!customer) customer = await prisma.customer.create({ data: { phone: this.phone, name: 'Community Member' } });
-
-                const transcriptText = this.fullTranscript.map((m: any) => `${m.role}: ${m.content}`).join('\n');
+                if (!customer)
+                    customer = await prisma.customer.create({ data: { phone: this.phone, name: 'Community Member' } });
+                const transcriptText = this.fullTranscript.map((m) => `${m.role}: ${m.content}`).join('\n');
                 await prisma.call.create({
                     data: {
                         customerId: customer.id,
@@ -290,11 +272,13 @@ class CallSession {
                         summary: 'Community Support Complaint'
                     }
                 });
-            } catch (e: any) { log(`DB Error: ${e.message}`); }
+            }
+            catch (e) {
+                log(`DB Error: ${e.message}`);
+            }
         }
     }
 }
-
 const server = net.createServer((socket) => {
     const session = new CallSession(socket);
     session.init();
@@ -304,18 +288,22 @@ const server = net.createServer((socket) => {
         while (buffer.length >= 3) {
             const id = buffer[0];
             const length = buffer.readUInt16BE(1);
-            if (buffer.length < 3 + length) break;
+            if (buffer.length < 3 + length)
+                break;
             const payload = buffer.slice(3, 3 + length);
             buffer = buffer.slice(3 + length);
-            if (id === 0x10) session.handleAudioFromAsterisk(payload);
-            else if (id === 0x01) session.phone = payload.toString();
-            else if (id === 0x00) socket.end();
+            if (id === 0x10)
+                session.handleAudioFromAsterisk(payload);
+            else if (id === 0x01)
+                session.phone = payload.toString();
+            else if (id === 0x00)
+                socket.end();
         }
     });
     socket.on('end', () => session.cleanup());
-    socket.on('error', () => {});
+    socket.on('error', () => { });
 });
-
 server.listen(AUDIOSOCKET_PORT, '0.0.0.0', () => {
     log(`🚀 Community Support Voice Agent Listening on port ${AUDIOSOCKET_PORT}`);
 });
+//# sourceMappingURL=agent_audiosocket.js.map

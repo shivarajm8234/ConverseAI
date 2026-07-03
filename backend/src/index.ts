@@ -170,7 +170,7 @@ app.post('/api/graph', async (req, res) => {
         // 2. Create the Graph Node with embedding
         let node;
         if (embedding) {
-            const vectorString = `[${embedding.join(',')}]`;
+            const vectorString = `[${(embedding as number[]).join(',')}]`;
             node = await prisma.$queryRawUnsafe(`
                 INSERT INTO "GraphNode" (id, label, type, metadata, embedding, "createdAt")
                 VALUES (gen_random_uuid(), $1, $2, $3, '${vectorString}'::vector, now())

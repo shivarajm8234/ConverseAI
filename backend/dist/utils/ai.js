@@ -1,94 +1,16 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { prisma } from './db.js';
 dotenv.config();
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
-const groqKey = process.env.GROQ_API_KEY;
-const openaiKey = process.env.OPENAI_API_KEY;
-const useGroq = Boolean(groqKey?.length);
-const groqModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
-function assertChatConfigured() {
-    if (!useGroq && !openaiKey?.length) {
-        throw new Error('Set GROQ_API_KEY (recommended) or OPENAI_API_KEY for LLM features.');
-    }
-}
-const chatClient = new OpenAI({
-    apiKey: useGroq ? groqKey : openaiKey,
-    baseURL: useGroq ? GROQ_BASE_URL : undefined,
+const SARVAM_BASE_URL = 'https://api.sarvam.ai';
+const sarvamKey = process.env.SARVAM_API_KEY;
+export const chatClient = new OpenAI({
+    apiKey: sarvamKey,
+    baseURL: SARVAM_BASE_URL,
+    defaultHeaders: { 'api-subscription-key': sarvamKey }
 });
-const embeddingClient = openaiKey !== undefined && openaiKey.length > 0
-    ? new OpenAI({ apiKey: openaiKey })
-    : null;
-const chatModel = useGroq ? groqModel : 'gpt-4o-mini';
-export const getEmbeddings = async (text) => {
-    if (!embeddingClient) {
-        console.warn('getEmbeddings: No OPENAI_API_KEY (Groq does not expose OpenAI-style embeddings). Skipping.');
-        return undefined;
-    }
-    const response = await embeddingClient.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: text,
-    });
-    return response.data?.[0]?.embedding;
-};
-export const processDocument = async (content) => {
-    assertChatConfigured();
-    const completion = await chatClient.chat.completions.create({
-        model: chatModel,
-        messages: [
-            {
-                role: 'system',
-                content: 'Extract entities and their relationships from the following text in JSON format: { entities: [{ name, type, properties }], relationships: [{ source, target, relationship }] }',
-            },
-            {
-                role: 'user',
-                content,
-            },
-        ],
-        response_format: { type: 'json_object' },
-    });
-    return JSON.parse(completion.choices?.[0]?.message?.content ?? '{}');
-};
-export const extractIntent = async (transcript) => {
-    assertChatConfigured();
-    const completion = await chatClient.chat.completions.create({
-        model: chatModel,
-        messages: [
-            {
-                role: 'system',
-                content: 'Exract intent, customer sentiment, and important information from this call transcript in JSON: { intent, sentiment, importantInfo, requiresFollowUp }',
-            },
-            {
-                role: 'user',
-                content: transcript,
-            },
-        ],
-        response_format: { type: 'json_object' },
-    });
-    return JSON.parse(completion.choices?.[0]?.message?.content ?? '{}');
-};
-let knowledgeCache = null;
-const CACHE_TTL = 60000; // 60 seconds
-/** Fetch all manual knowledge graph nodes to use as LLM context */
-export const getKnowledgeContext = async () => {
-    const now = Date.now();
-    if (knowledgeCache && (now - knowledgeCache.ts < CACHE_TTL)) {
-        return knowledgeCache.data;
-    }
-    try {
-        const nodes = await prisma.graphNode.findMany({
-            take: 30,
-            orderBy: { createdAt: 'desc' }
-        });
-        const data = nodes.map(n => `${n.label}: ${n.metadata && n.metadata.content ? n.metadata.content : ''}`).join('\n');
-        knowledgeCache = { data, ts: now };
-        return data;
-    }
-    catch (e) {
-        console.error('getKnowledgeContext Error:', e.message);
-        return "Ather 450X price is Rs 1,45,000, 105km range, 90kmph top speed.";
-    }
-};
-/** Chat client: Groq when GROQ_API_KEY is set, otherwise OpenAI. */
 export const openai = chatClient;
+export const getKnowledgeContext = async () => "";
+export const searchVectorStore = async (query) => "";
+export const getEmbeddings = async (text) => [0, 0, 0];
+export const extractIntent = async (text) => ({ intent: "QUERY", sentiment: "NEUTRAL" });
 //# sourceMappingURL=ai.js.map
